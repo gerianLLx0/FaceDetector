@@ -20,8 +20,19 @@ O2. Calculate distance of nearest face
 
 import numpy as np
 import cv2 as cv
+import matplotlib.pyplot as plt
+import time
 
-
+class Face():
+    def __init__(self):
+        self.id = -1
+        self.distance = -1
+        self.x = 0
+        self.y = 0
+        self.w = 0
+        self.h = 0
+        self.centre = 0
+    
 def process_webcam(detector, tm):
     """
     webcam video capture code from opencv docs
@@ -31,26 +42,23 @@ def process_webcam(detector, tm):
     if not cap.isOpened():
         print("Cannot open camera")
         exit()
+    
+    num_faces_over_time = []
     while True:
         # Capture frame-by-frame
         ret, frame = cap.read()
-        # if frame is read correctly ret is True
+        # If frame is read correctly ret is True
         if not ret:
             print("Can't receive frame (stream end?). Exiting ...")
             break
-        
-        # Operations on frame
-        img_H = int(frame.shape[0])
-        img_W = int(frame.shape[1])
-        detector.setInputSize((img_W, img_H))
-        # Get detections
-        tm.start()
-        faces = detector.detect(frame)
-        tm.stop()
-        # Draw results on the input image
-        draw_on_frame(frame, faces, tm.getFPS())
-        cv.imshow('Live', frame)
-        
+        # Perform operations on frame
+        faces = process_frame(frame, detector, tm)
+        # Gathering, calculating and plotting the data from detected faces
+        # Get data from faces (# of faces and distance to faces)
+        num_faces = get_data(faces)
+        num_faces_over_time.append(num_faces)
+        # Plot live data
+        plot_num_faces(num_faces_over_time)
         # How to exit
         if cv.waitKey(1) == ord('q'):
             break
@@ -58,6 +66,33 @@ def process_webcam(detector, tm):
     cap.release()
     cv.destroyAllWindows()
 
+def process_frame(frame, detector, tm):
+    """
+    do all the face detection, data gathering and plotting
+    """
+    # Timer
+    # starttime = time.time()
+    # while True:
+    #     print("tick")
+    #     time.sleep(60.0 - ((time.time() - starttime) % 60.0))
+    
+    img_H = int(frame.shape[0])
+    img_W = int(frame.shape[1])
+    detector.setInputSize((img_W, img_H))
+    # Get detections
+    tm.start()
+    faces = detector.detect(frame)
+    tm.stop()
+    # Draw results on the input image
+    draw_on_frame(frame, faces, tm.getFPS())
+    cv.imshow('Live', frame)
+    return faces
+
+    
+def get_data(faces):
+    if faces[1] is not None:
+        num_faces = len(faces[1])
+        return num_faces    
     
 def draw_on_frame(frame, faces, fps, thickness=2):
     if faces[1] is not None:
@@ -74,13 +109,26 @@ def draw_on_frame(frame, faces, fps, thickness=2):
         cv.putText(frame, 'FPS: {:.2f}'.format(fps), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         cv.putText(frame, f'Number of Faces: {num_faces}', (1, 50), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+def plot_num_faces(data):
+    plt.figure(1)
+    plt.clf()
+    print(data)
+    # x = markers[:,0]
+    # y = markers[:,1]
+    # plt.xlim([-5,5])
+    # plt.ylim([-5,5])
+    # plt.plot(y,x,'b.')
+    plt.plot(data)
+    plt.pause(0.05)
+
 def main():
     tm = cv.TickMeter()
-    # Initialize detector
+    # Initialize detector with default values
+    # (note: detector image size will be overwritten later)
     detector = cv.FaceDetectorYN.create(
         "Data/face_detection_yunet_2022mar.onnx", 
         "", 
-        (320, 320),
+        (0, 0),
         0.9,
         0.3,
         5000)
