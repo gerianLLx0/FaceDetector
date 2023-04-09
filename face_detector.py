@@ -20,8 +20,9 @@ O2. Calculate distance of nearest face
 
 import numpy as np
 import cv2 as cv
-import matplotlib.pyplot as plt
-# import matplotlib.animation as animation
+# import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 import PySimpleGUI as sg
 # import time
 
@@ -34,44 +35,6 @@ class Face():
         self.w = 0
         self.h = 0
         self.centre = 0
-    
-def process_webcam(detector, tm):
-    """
-    webcam video capture code from opencv docs
-    https://docs.opencv.org/4.x/dd/d43/tutorial_py_video_display.html
-    """
-    cap = cv.VideoCapture(0)
-    if not cap.isOpened():
-        print("Cannot open camera")
-        exit()
-    
-    # Declare needed variables
-    num_faces_over_time = []
-    # fig, ax = plt.subplots()
-    
-    # Start looping video feed
-    while True:
-        # Capture frame-by-frame
-        ret, frame = cap.read()
-        # If frame is read correctly ret is True
-        if not ret:
-            print("Can't receive frame (stream end?). Exiting ...")
-            break
-        # Perform operations on frame
-        faces = process_frame(frame, detector, tm)
-        # Gathering, calculating and plotting the data from detected faces
-        # Get data from faces (# of faces and distance to faces)
-        num_faces = get_data(faces)
-        num_faces_over_time.append(num_faces)
-        # Plot live data
-        # plot_num_faces(num_faces_over_time)
-
-        # How to exit
-        if cv.waitKey(1) == ord('q'):
-            break
-    # When done, release the capture
-    cap.release()
-    cv.destroyAllWindows()
 
 def process_frame(frame, detector, tm):
     """
@@ -98,8 +61,8 @@ def process_frame(frame, detector, tm):
 def get_data(faces):
     if faces[1] is not None:
         num_faces = len(faces[1])
-        return num_faces    
-       
+        return num_faces            
+
 def draw_on_frame(frame, faces, fps, thickness=2):
     if faces[1] is not None:
         num_faces = len(faces[1])
@@ -107,72 +70,57 @@ def draw_on_frame(frame, faces, fps, thickness=2):
             # print('Face {}, top-left coordinates: ({:.0f}, {:.0f}), box width: {:.0f}, box height {:.0f}, score: {:.2f}'.format(idx, face[0], face[1], face[2], face[3], face[-1]))
             coords = face[:-1].astype(np.int32)
             cv.rectangle(frame, (coords[0], coords[1]), (coords[0]+coords[2], coords[1]+coords[3]), (0, 255, 0), thickness)
-            # cv.circle(frame, (coords[4], coords[5]), 2, (255, 0, 0), thickness)
-            # cv.circle(frame, (coords[6], coords[7]), 2, (0, 0, 255), thickness)
-            # cv.circle(frame, (coords[8], coords[9]), 2, (0, 255, 0), thickness)
-            # cv.circle(frame, (coords[10], coords[11]), 2, (255, 0, 255), thickness)
-            # cv.circle(frame, (coords[12], coords[13]), 2, (0, 255, 255), thickness)
         cv.putText(frame, 'FPS: {:.2f}'.format(fps), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         cv.putText(frame, f'Number of Faces: {num_faces}', (1, 50), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-def plot_num_faces(data):
-    plt.figure(1)
-    plt.clf()
-    plt.plot(data)
-    plt.pause(0.05)
-    plt.show()
+def draw_figure(canvas, figure):
+    figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
+    figure_canvas_agg.draw()
+    figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
+    return figure_canvas_agg
 
-def run_gui():
-    # Define the window's contents
-    layout = [[sg.Text("What's your name?")],
-              [sg.Input(key='-INPUT-')],
-              [sg.Text(size=(40,1), key='-OUTPUT-')],
-              [sg.Button('Ok'), sg.Button('Quit')]]
-    
-    # Create the window
-    window = sg.Window('Face Detector', layout)
-    
-    # Display and interact with the Window using an Event Loop
-    while True:
-        event, values = window.read()
-        # See if user wants to quit or window was closed
-        if event == sg.WINDOW_CLOSED or event == 'Quit':
-            break
-        # Output a message to the window
-        window['-OUTPUT-'].update('Hello ' + values['-INPUT-'] + "! Thanks for trying PySimpleGUI")
-    
-    # Finish up by removing from the screen
-    window.close()
- 
-    
 def run_gui_opencv(detector, tm):
     # define the window layout
-    layout = [[sg.Text('OpenCV Demo', size=(40, 1), justification='center', font='Helvetica 20')],
-              [sg.Image(filename='', key='image')],
-              [sg.Button('Record', size=(10, 1), font='Helvetica 14'),
-               sg.Button('Stop', size=(10, 1), font='Any 14'),
-               sg.Button('Exit', size=(10, 1), font='Helvetica 14'), ]]
+    layout = [[sg.Text('Face Detector', size=(40, 1), justification='left', font='Helvetica 25')],
+              [sg.Image(filename='', key='image'), sg.Canvas(size=(300, 300), key='-CANVAS-')],
+              [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-')],
+              [sg.Button('Presence Mode', size=(12, 2), font='Helvetica 14'),
+               sg.Button('Distance Mode', size=(12, 2), font='Helvetica 14'),
+               sg.Button('Advanced Mode', size=(12, 2), font='Helvetica 14'),
+               sg.Button('Exit', size=(12, 2), font='Helvetica 14')]]
 
     # create the window and show it without the plot
-    window = sg.Window('Demo Application - OpenCV Integration',
-                       layout, location=(800, 400))
-
+    window = sg.Window('Face Detector', layout, location=(400, 200), finalize=True)
+    canvas_elem = window['-CANVAS-']
+    canvas = canvas_elem.TKCanvas
+    
     # ---===--- Event LOOP Read and display frames, operate the GUI --- #
     cap = cv.VideoCapture(0)
+    
+    # initialise variables
     recording = False
-
+    mode = ''
+    num_faces_over_time = []
+    dummy_distance = []
+    # draw the initial plot in the window
+    fig = Figure()
+    ax = fig.add_subplot(111)
+    fig_agg = draw_figure(canvas, fig)
+    # window.Element('-CANVAS-').Update(visible = False)
+    
     while True:
         event, values = window.read(timeout=20)
         if event == 'Exit' or event == sg.WIN_CLOSED:
             break
-        elif event == 'Record':
+        elif event == 'Presence Mode':
             recording = True
-        elif event == 'Stop':
-            recording = False
-            img = np.full((480, 640), 255)
-            # this is faster, shorter and needs less includes
-            imgbytes = cv.imencode('.png', img)[1].tobytes()
-            window['image'].update(data=imgbytes)
+            mode = 'P'
+        elif event == 'Distance Mode':
+            recording = True
+            mode = 'D'
+        elif event == 'Advanced Mode':
+            recording = True
+            mode = 'A'
 
         if recording:
             ret, frame = cap.read()
@@ -180,14 +128,37 @@ def run_gui_opencv(detector, tm):
             # Perform operations on frame
             faces = process_frame(frame, detector, tm)
             num_faces = get_data(faces)
-            print(num_faces)
+            num_faces_over_time.append(num_faces)
+            dummy_distance.append(num_faces+5)
             
-            # Show on gui
-            imgbytes = cv.imencode('.png', frame)[1].tobytes()  # ditto
+            # Show frame on gui
+            imgbytes = cv.imencode('.png', frame)[1].tobytes()
             window['image'].update(data=imgbytes)
+            # window.Element('-CANVAS-').Update(visible = True)
+            
+            # Show text data on gui
+            if mode == 'P':
+                window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces}')
+                ax.cla()
+                ax.set_xlabel("Time")
+                ax.set_ylabel("Number of Faces")
+                ax.grid()
+                ax.plot(num_faces_over_time)
+                fig_agg.draw()
+            elif mode == 'D':
+                window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {num_faces}')
+                ax.cla()
+                ax.set_xlabel("Time")
+                ax.set_ylabel("Distance to Nearest Face")
+                ax.grid()
+                ax.plot(dummy_distance)
+                fig_agg.draw()
+            elif mode == 'A':
+                window['-OUTPUT_MODE_1-'].update(f'Sorted distances: {num_faces}')
+                
     # Finish up by removing from the screen
     cap.release()
-    cv.destroyAllWindows()
+    # cv.destroyAllWindows()
     window.close() 
 
 def main():
@@ -201,7 +172,6 @@ def main():
         0.9,
         0.3,
         5000)
-    # run_gui()
     run_gui_opencv(detector, tm)
     # process_webcam(detector, tm)
 
