@@ -53,9 +53,7 @@ def process_frame(frame, detector, tm):
     tm.start()
     faces = detector.detect(frame)
     tm.stop()
-    # Draw results on the input image
     draw_on_frame(frame, faces, tm.getFPS())
-    # cv.imshow('Live', frame)
     return faces
 
 def get_data(faces):
@@ -80,21 +78,26 @@ def draw_figure(canvas, figure):
     return figure_canvas_agg
 
 def run_gui_opencv(detector, tm):
+    """
+    Main GUI and event loop
+    """
     # define the window layout
     layout = [[sg.Text('Face Detector', size=(40, 1), justification='left', font='Helvetica 25')],
-              [sg.Image(filename='', key='image'), sg.Canvas(size=(300, 300), key='-CANVAS-')],
               [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-')],
               [sg.Button('Presence Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Distance Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Advanced Mode', size=(12, 2), font='Helvetica 14'),
-               sg.Button('Exit', size=(12, 2), font='Helvetica 14')]]
+               sg.Button('Exit', size=(12, 2), font='Helvetica 14')],
+              [sg.Image(filename='', key='image'), sg.Canvas(size=(60, 60), key='-CANVAS-')]]
 
     # create the window and show it without the plot
     window = sg.Window('Face Detector', layout, location=(400, 200), finalize=True)
     canvas_elem = window['-CANVAS-']
     canvas = canvas_elem.TKCanvas
     
-    # ---===--- Event LOOP Read and display frames, operate the GUI --- #
+    ################################
+    # Event Loop and GUI Operations
+    ################################
     cap = cv.VideoCapture(0)
     
     # initialise variables
@@ -103,10 +106,10 @@ def run_gui_opencv(detector, tm):
     num_faces_over_time = []
     dummy_distance = []
     # draw the initial plot in the window
-    fig = Figure()
+    fig = Figure(figsize=(6,4))
     ax = fig.add_subplot(111)
     fig_agg = draw_figure(canvas, fig)
-    # window.Element('-CANVAS-').Update(visible = False)
+    canvas_elem.hide_row()
     
     while True:
         event, values = window.read(timeout=20)
@@ -137,19 +140,22 @@ def run_gui_opencv(detector, tm):
             # window.Element('-CANVAS-').Update(visible = True)
             
             # Show text data on gui
+            canvas_elem.unhide_row()
             if mode == 'P':
                 window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces}')
                 ax.cla()
-                ax.set_xlabel("Time")
-                ax.set_ylabel("Number of Faces")
+                ax.set_xlabel('Time')
+                ax.set_ylabel('Number of Faces')
+                ax.set_title('Number of Faces over Time')
                 ax.grid()
                 ax.plot(num_faces_over_time)
                 fig_agg.draw()
             elif mode == 'D':
                 window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {num_faces}')
                 ax.cla()
-                ax.set_xlabel("Time")
-                ax.set_ylabel("Distance to Nearest Face")
+                ax.set_xlabel('Time')
+                ax.set_ylabel('Distance')
+                ax.set_title('Distance to Nearest Face over Time')
                 ax.grid()
                 ax.plot(dummy_distance)
                 fig_agg.draw()
@@ -158,7 +164,6 @@ def run_gui_opencv(detector, tm):
                 
     # Finish up by removing from the screen
     cap.release()
-    # cv.destroyAllWindows()
     window.close() 
 
 def main():
@@ -166,14 +171,14 @@ def main():
     # Initialize detector with default values
     # (note: detector image size will be overwritten later)
     detector = cv.FaceDetectorYN.create(
-        "Data/face_detection_yunet_2022mar.onnx", 
-        "", 
+        'Data/face_detection_yunet_2022mar.onnx', 
+        '', 
         (0, 0),
         0.9,
         0.3,
         5000)
     run_gui_opencv(detector, tm)
-    # process_webcam(detector, tm)
+
 
 if __name__ == "__main__":
     main()
