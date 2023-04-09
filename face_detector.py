@@ -21,6 +21,8 @@ O2. Calculate distance of nearest face
 import numpy as np
 import cv2 as cv
 import matplotlib.pyplot as plt
+# import matplotlib.animation as animation
+import PySimpleGUI as sg
 import time
 
 class Face():
@@ -43,7 +45,11 @@ def process_webcam(detector, tm):
         print("Cannot open camera")
         exit()
     
+    # Declare needed variables
     num_faces_over_time = []
+    # fig, ax = plt.subplots()
+    
+    # Start looping video feed
     while True:
         # Capture frame-by-frame
         ret, frame = cap.read()
@@ -58,7 +64,8 @@ def process_webcam(detector, tm):
         num_faces = get_data(faces)
         num_faces_over_time.append(num_faces)
         # Plot live data
-        plot_num_faces(num_faces_over_time)
+        # plot_num_faces(num_faces_over_time)
+
         # How to exit
         if cv.waitKey(1) == ord('q'):
             break
@@ -88,12 +95,11 @@ def process_frame(frame, detector, tm):
     cv.imshow('Live', frame)
     return faces
 
-    
 def get_data(faces):
     if faces[1] is not None:
         num_faces = len(faces[1])
         return num_faces    
-    
+       
 def draw_on_frame(frame, faces, fps, thickness=2):
     if faces[1] is not None:
         num_faces = len(faces[1])
@@ -112,15 +118,32 @@ def draw_on_frame(frame, faces, fps, thickness=2):
 def plot_num_faces(data):
     plt.figure(1)
     plt.clf()
-    print(data)
-    # x = markers[:,0]
-    # y = markers[:,1]
-    # plt.xlim([-5,5])
-    # plt.ylim([-5,5])
-    # plt.plot(y,x,'b.')
     plt.plot(data)
     plt.pause(0.05)
+    plt.show()
 
+def run_gui():
+    # Define the window's contents
+    layout = [[sg.Text("What's your name?")],
+              [sg.Input(key='-INPUT-')],
+              [sg.Text(size=(40,1), key='-OUTPUT-')],
+              [sg.Button('Ok'), sg.Button('Quit')]]
+    
+    # Create the window
+    window = sg.Window('Face Detector', layout)
+    
+    # Display and interact with the Window using an Event Loop
+    while True:
+        event, values = window.read()
+        # See if user wants to quit or window was closed
+        if event == sg.WINDOW_CLOSED or event == 'Quit':
+            break
+        # Output a message to the window
+        window['-OUTPUT-'].update('Hello ' + values['-INPUT-'] + "! Thanks for trying PySimpleGUI")
+    
+    # Finish up by removing from the screen
+    window.close()
+    
 def main():
     tm = cv.TickMeter()
     # Initialize detector with default values
@@ -132,7 +155,8 @@ def main():
         0.9,
         0.3,
         5000)
-    process_webcam(detector, tm)
+    run_gui()
+    # process_webcam(detector, tm)
 
 if __name__ == "__main__":
     main()
