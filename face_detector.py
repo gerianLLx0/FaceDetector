@@ -164,9 +164,12 @@ def run_gui_opencv():
     while True:
         event, values = window.read(timeout=20)
         if event == 'Exit' or event == sg.WIN_CLOSED:
-            return
+            cap.release()
+            break
+
         elif event == 'Record':
             recording = True
+
         elif event == 'Stop':
             recording = False
             img = np.full((480, 640), 255)
@@ -178,7 +181,8 @@ def run_gui_opencv():
             ret, frame = cap.read()
             imgbytes = cv.imencode('.png', frame)[1].tobytes()  # ditto
             window['image'].update(data=imgbytes)
-
+    # Finish up by removing from the screen
+    window.close() 
 
 def main():
     tm = cv.TickMeter()
