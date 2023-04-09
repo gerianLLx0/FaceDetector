@@ -23,7 +23,7 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 # import matplotlib.animation as animation
 import PySimpleGUI as sg
-import time
+# import time
 
 class Face():
     def __init__(self):
@@ -92,7 +92,7 @@ def process_frame(frame, detector, tm):
     tm.stop()
     # Draw results on the input image
     draw_on_frame(frame, faces, tm.getFPS())
-    cv.imshow('Live', frame)
+    # cv.imshow('Live', frame)
     return faces
 
 def get_data(faces):
@@ -145,7 +145,7 @@ def run_gui():
     window.close()
  
     
-def run_gui_opencv():
+def run_gui_opencv(detector, tm):
     # define the window layout
     layout = [[sg.Text('OpenCV Demo', size=(40, 1), justification='center', font='Helvetica 20')],
               [sg.Image(filename='', key='image')],
@@ -164,12 +164,9 @@ def run_gui_opencv():
     while True:
         event, values = window.read(timeout=20)
         if event == 'Exit' or event == sg.WIN_CLOSED:
-            cap.release()
             break
-
         elif event == 'Record':
             recording = True
-
         elif event == 'Stop':
             recording = False
             img = np.full((480, 640), 255)
@@ -179,9 +176,18 @@ def run_gui_opencv():
 
         if recording:
             ret, frame = cap.read()
+            
+            # Perform operations on frame
+            faces = process_frame(frame, detector, tm)
+            num_faces = get_data(faces)
+            print(num_faces)
+            
+            # Show on gui
             imgbytes = cv.imencode('.png', frame)[1].tobytes()  # ditto
             window['image'].update(data=imgbytes)
     # Finish up by removing from the screen
+    cap.release()
+    cv.destroyAllWindows()
     window.close() 
 
 def main():
@@ -196,7 +202,7 @@ def main():
         0.3,
         5000)
     # run_gui()
-    run_gui_opencv()
+    run_gui_opencv(detector, tm)
     # process_webcam(detector, tm)
 
 if __name__ == "__main__":
