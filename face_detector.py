@@ -132,40 +132,50 @@ def sort_faces(faces):
         print('No faces')
         return None 
 
-def compare_to_existing_faces(existing_faces, seen_faces):
+def update_existing_faces(existing_faces, seen_faces):
+    print(f"UPDATING: existing: {existing_faces}")
     new_faces = []
     if existing_faces:
         for s_face in seen_faces:
             # compare s_face to every existing face
-            same_to_any = False
+            # if same to an existing, transfer the existing's id
+            # and add the s_face to the new_faces
+            has_same = False
             for e_face in existing_faces:
                 if is_same(e_face, s_face):
-                    same_to_any = True
-            # if new, add to new list
-            if not same_to_any:
+                    s_face.id = e_face.id
+                    new_faces.append(s_face)
+                    has_same = True
+                    break
+            if not has_same:
                 new_faces.append(s_face)
     else:
+        # initializes existing
         for s_face in seen_faces:
             new_faces.append(s_face)
+    print(f"UPDATING: new: {new_faces}")
     return new_faces
 
 def is_same(e_face, n_face):
     """
-    compare x, y, w & h if the same face within %
+    compare x, y, w & h if the same face within % and pixel thresh
     """
     percent = 0.5
+    pixel_thresh = 50
     same = np.zeros(4)
-    if (e_face.x * (1-percent) <= n_face.x) and (n_face.x <= e_face.x * (1+percent)):
+    if (e_face.x - pixel_thresh <= n_face.x) and (n_face.x <= e_face.x + pixel_thresh):
         same[0] = 1
-    if (e_face.y * (1-percent) <= n_face.y) and (n_face.y <= e_face.y * (1+percent)):
+    if (e_face.y - pixel_thresh <= n_face.y) and (n_face.y <= e_face.y + pixel_thresh):
         same[1] = 1  
     if (e_face.w * (1-percent) <= n_face.w) and (n_face.w <= e_face.w * (1+percent)):
         same[2] = 1
     if (e_face.h * (1-percent) <= n_face.h) and (n_face.h <= e_face.h * (1+percent)):
         same[3] = 1
     if same.all():
+        print("same")
         return True
     else:
+        print("diff")
         return False
 
 def draw_on_frame(frame, faces, fps, thickness=2):
@@ -256,7 +266,7 @@ def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dists_over_tim
         ax.set_axis_off()
         fig_agg.draw()
         for face in faces:
-            window['-MULTILINE-'].print(f'Face {face.id}: {face.distance}')
+            window['-MULTILINE-'].print(f'Face {face.id}: {face.distance} mm')
 
 def run_gui():
     """
@@ -286,12 +296,13 @@ def run_gui():
             detected_faces = detect_faces(frame, detector, tm)
             if detected_faces:
                 faces, counter = convert_to_class_face(detected_faces, counter)           
-                faces = compare_to_existing_faces(existing_faces, faces)              
-                sort_faces(faces)
+                existing_faces = update_existing_faces(existing_faces, faces)
+                sort_faces(existing_faces)
+                print(f"MAIN: {existing_faces}")
                 
+                # Operations for plotting
                 num_faces_over_time.append(len(faces))
-                nearest_face = faces[0]
-                dists_over_time.append(nearest_face.distance)
+                dists_over_time.append(faces[0].distance)
             else:
                 num_faces_over_time.append(0)
                 dists_over_time.append(0)
@@ -300,7 +311,7 @@ def run_gui():
             imgbytes = cv.imencode('.png', frame)[1].tobytes()
             window['-IMAGE-'].update(data=imgbytes)
             activate_mode(mode, window, ax, fig_agg, num_faces_over_time, 
-                          dists_over_time, faces)
+                          dists_over_time, existing_faces)
             
     # Finish up by removing from the screen
     cap.release()
