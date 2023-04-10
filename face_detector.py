@@ -11,18 +11,8 @@ requirements:
     3. PySimpleGUI 4.60.4
 """
 
-"""
-ROADMAP
-O1. Count number of faces
-O2. Calculate distance of nearest face
-
-1. access webcam
-2. use opencv face detection
-"""
-
 import numpy as np
 import cv2 as cv
-# import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import PySimpleGUI as sg
@@ -48,6 +38,9 @@ class Face():
         self.h = 0
         self.size = 0
         self.coeffs = self.get_coeffs()
+    
+    def __repr__(self):
+        return f'Face {self.id}: x: {self.x} y: {self.y} w: {self.w}, h: {self.h}\n'
     
     def show_data(self):
         print(f'Face {self.id}: x: {self.x} y: {self.y} w: {self.w}, h: {self.h}')
@@ -80,6 +73,7 @@ class Face():
                 print('Could not solve matrix') 
         return coeffs
 
+
 def detect_faces(frame, detector, tm):
     """
     do all the face detection, data gathering and plotting
@@ -109,11 +103,12 @@ def detect_faces(frame, detector, tm):
     else:
         return []
 
-def convert_to_class_face(faces):
+def convert_to_class_face(faces, counter):
     faces_data = []
     if faces:
         for idx, face in enumerate(faces):
             face_data = Face()
+            face_data.id = counter
             face_data.x = round(face[0],0)
             face_data.y = round(face[1],0)
             face_data.w = round(face[2],0)
@@ -121,7 +116,8 @@ def convert_to_class_face(faces):
             # face_data.show_data()
             faces_data.append(face_data)
             face_data.calc_dist()
-        return faces_data
+            counter += 1
+        return faces_data, counter
 
 def sort_faces(faces):
     """
@@ -135,7 +131,43 @@ def sort_faces(faces):
     else:
         print('No faces')
         return None 
-    
+
+def compare_to_existing_faces(existing_faces, seen_faces):
+    new_faces = []
+    if existing_faces:
+        for s_face in seen_faces:
+            # compare s_face to every existing face
+            same_to_any = False
+            for e_face in existing_faces:
+                if is_same(e_face, s_face):
+                    same_to_any = True
+            # if new, add to new list
+            if not same_to_any:
+                new_faces.append(s_face)
+    else:
+        for s_face in seen_faces:
+            new_faces.append(s_face)
+    return new_faces
+
+def is_same(e_face, n_face):
+    """
+    compare x, y, w & h if the same face within %
+    """
+    percent = 0.5
+    same = np.zeros(4)
+    if (e_face.x * (1-percent) <= n_face.x) and (n_face.x <= e_face.x * (1+percent)):
+        same[0] = 1
+    if (e_face.y * (1-percent) <= n_face.y) and (n_face.y <= e_face.y * (1+percent)):
+        same[1] = 1  
+    if (e_face.w * (1-percent) <= n_face.w) and (n_face.w <= e_face.w * (1+percent)):
+        same[2] = 1
+    if (e_face.h * (1-percent) <= n_face.h) and (n_face.h <= e_face.h * (1+percent)):
+        same[3] = 1
+    if same.all():
+        return True
+    else:
+        return False
+
 def draw_on_frame(frame, faces, fps, thickness=2):
     if faces is not None:
         for idx, face in enumerate(faces):
@@ -157,20 +189,20 @@ def init_gui():
                sg.Button('Distance Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Advanced Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Exit', size=(12, 2), font='Helvetica 14'),
-               sg.Multiline('', key='-MULTILINE-', size=(40, 4))],
-              [sg.Image(filename='', key='-IMAGE-'), 
-               sg.Canvas(key='-CANVAS-')]]
+               sg.Multiline('', key='-MULTILINE-', size=(40, 5))],
+              [sg.Canvas(key='-CANVAS-'),
+               sg.Image(filename='', key='-IMAGE-')]]
 
     # create the window and show it without the plot
     window = sg.Window('Face Detector', layout, location=(200, 100), size=(1200,600), finalize=True)
     canvas_elem = window['-CANVAS-']
     canvas = canvas_elem.TKCanvas
 
-    # draw and hide the initial plot in the window
-    fig = Figure(figsize=(5,4), tight_layout=True)
+    # draw initial plot in the window
+    fig = Figure(figsize=(5,5))
     ax = fig.add_subplot(111)
+    ax.set_axis_off()
     fig_agg = draw_figure(canvas, fig)
-    canvas_elem.hide_row()
     
     return window, canvas_elem, ax, fig_agg
 
@@ -199,7 +231,7 @@ def get_mode(mode, event):
     else:
         return mode
     
-def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance):
+def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dists_over_time, faces):
     if mode == 'P':
         window['-MULTILINE-'].update(f'Number of faces: {num_faces_over_time[-1]}')
         ax.cla()
@@ -210,20 +242,21 @@ def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance
         ax.plot(num_faces_over_time)
         fig_agg.draw()
     elif mode == 'D':
-        window['-MULTILINE-'].update(f'Distance to nearest face: {dummy_distance[-1]} mm')
+        window['-MULTILINE-'].update(f'Distance to nearest face: {dists_over_time[-1]} mm')
         ax.cla()
         ax.set_xlabel('Time')
         ax.set_ylabel('Distance (mm)')
         ax.set_title('Distance to Nearest Face over Time')
         ax.grid()
-        ax.plot(dummy_distance)
+        ax.plot(dists_over_time)
         fig_agg.draw()
     elif mode == 'A':
-        window['-MULTILINE-'].update('List of Faces:')
-        window['-MULTILINE-'].print('Testing 1 2 3')
+        window['-MULTILINE-'].update('List of Faces:\n')
         ax.clear()
         ax.set_axis_off()
         fig_agg.draw()
+        for face in faces:
+            window['-MULTILINE-'].print(f'Face {face.id}: {face.distance}')
 
 def run_gui():
     """
@@ -231,13 +264,15 @@ def run_gui():
     """
     window, canvas_elem, ax, fig_agg = init_gui()
     cap = cv.VideoCapture(0)
+    detector = get_detector()
+    tm = cv.TickMeter()
    
     # initialise variables
-    tm = cv.TickMeter()
     num_faces_over_time = []
-    dummy_distance = []
+    dists_over_time = []
     mode = ''
-    detector = get_detector()
+    counter = 0
+    existing_faces = []
     
     while True:
         event, values = window.read(timeout=20)
@@ -250,24 +285,22 @@ def run_gui():
             # Perform operations on frame
             detected_faces = detect_faces(frame, detector, tm)
             if detected_faces:
-                faces = convert_to_class_face(detected_faces)
+                faces, counter = convert_to_class_face(detected_faces, counter)           
+                faces = compare_to_existing_faces(existing_faces, faces)              
                 sort_faces(faces)
                 
-                nearest_face = faces[0]
-                
                 num_faces_over_time.append(len(faces))
-                dummy_distance.append(nearest_face.distance)
+                nearest_face = faces[0]
+                dists_over_time.append(nearest_face.distance)
             else:
                 num_faces_over_time.append(0)
-                dummy_distance.append(0)
+                dists_over_time.append(0)
                 
-            # Show frame on gui
+            # Show updates on gui
             imgbytes = cv.imencode('.png', frame)[1].tobytes()
             window['-IMAGE-'].update(data=imgbytes)
-            
-            # Show text data on gui
-            canvas_elem.unhide_row()
-            activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance)
+            activate_mode(mode, window, ax, fig_agg, num_faces_over_time, 
+                          dists_over_time, faces)
             
     # Finish up by removing from the screen
     cap.release()
