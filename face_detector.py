@@ -143,11 +143,7 @@ def draw_figure(canvas, figure):
     figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
     return figure_canvas_agg
 
-def run_gui_opencv(detector, tm):
-    """
-    Main GUI and event loop
-    """
-    # define the window layout
+def init_gui():
     layout = [[sg.Text('Face Detector', size=(40, 1), justification='left', font='Helvetica 25')],
               [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-')],
               [sg.Button('Presence Mode', size=(12, 2), font='Helvetica 14'),
@@ -159,7 +155,15 @@ def run_gui_opencv(detector, tm):
     # create the window and show it without the plot
     window = sg.Window('Face Detector', layout, location=(400, 200), finalize=True)
     canvas_elem = window['-CANVAS-']
-    canvas = canvas_elem.TKCanvas
+    canvas = canvas_elem.TKCanvas    
+    return window, canvas, canvas_elem
+    
+def run_gui_opencv(detector, tm):
+    """
+    Main GUI and event loop
+    """
+    # define the window layout
+    window, canvas, canvas_elem = init_gui()
     
     ################################
     # Event Loop and GUI Operations
