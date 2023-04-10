@@ -26,7 +26,9 @@ import cv2 as cv
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import PySimpleGUI as sg
-# from time import perf_counter, sleep
+
+## Constants
+PATH_DETECTION_MODEL = 'Data/face_detection_yunet_2022mar.onnx'
 
 ## Calibration Measurements
 # w_mm, h_mm
@@ -35,6 +37,7 @@ FACE_SIZE = (130, 180)
 PT1 = (235, 300, 300)
 PT2 = (125, 160, 600)
 
+    
 class Face():
     def __init__(self):
         self.id = -1
@@ -59,7 +62,7 @@ class Face():
             A = self.coeffs[i, 0]
             B = self.coeffs[i, 1]
             dists[i] = A*(FACE_SIZE[i]/size[i]) - B
-        self.distance = round(np.average(dists),0)
+        self.distance = int(np.average(dists))
 
     def get_coeffs(self):
         # get constants from using w and h
@@ -77,7 +80,7 @@ class Face():
                 print('Could not solve matrix') 
         return coeffs
 
-def get_faces(frame, detector, tm):
+def detect_faces(frame, detector, tm):
     """
     do all the face detection, data gathering and plotting
     DNN detector better than Haar cascade
@@ -106,8 +109,8 @@ def get_faces(frame, detector, tm):
     else:
         return []
 
-def get_data(faces):
-    face_data_list = []
+def convert_to_class_face(faces):
+    faces_data = []
     if faces:
         for idx, face in enumerate(faces):
             face_data = Face()
@@ -116,12 +119,11 @@ def get_data(faces):
             face_data.w = round(face[2],0)
             face_data.h = round(face[3],0)
             # face_data.show_data()
-            face_data_list.append(face_data)
+            faces_data.append(face_data)
             face_data.calc_dist()
-        num_faces = len(faces)
-        return num_faces, face_data_list          
+        return faces_data
 
-def get_nearest_face(faces):
+def sort_faces(faces):
     """
     assume largest area = closest face
     """
@@ -129,7 +131,7 @@ def get_nearest_face(faces):
         for face in faces:
             face.calc_size()
         faces.sort(key=lambda f: f.size, reverse=True)
-        return faces[0]
+        return faces
     else:
         print('No faces')
         return None 
@@ -140,7 +142,7 @@ def draw_on_frame(frame, faces, fps, thickness=2):
             # print('Face {}, top-left coordinates: ({:.0f}, {:.0f}), box width: {:.0f}, box height {:.0f}, score: {:.2f}'.format(idx, face[0], face[1], face[2], face[3], face[-1]))
             coords = face[:-1].astype(np.int32)
             cv.rectangle(frame, (coords[0], coords[1]), (coords[0]+coords[2], coords[1]+coords[3]), (0, 255, 0), thickness)
-        cv.putText(frame, 'FPS: {:.2f}'.format(fps), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv.putText(frame, 'FPS: {:.2f}'.format(fps), (5, 30), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 def draw_figure(canvas, figure):
     figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
@@ -150,27 +152,43 @@ def draw_figure(canvas, figure):
 
 def init_gui():
     # define the window layout
-    layout = [[sg.Text('Face Detector', size=(40, 1), justification='left', font='Helvetica 25')],
-              [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-', font='Helvetica 25')],
+    layout = [[sg.Text('Face Detector', size=(40, 1), font='Helvetica 25')],
               [sg.Button('Presence Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Distance Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Advanced Mode', size=(12, 2), font='Helvetica 14'),
-               sg.Button('Exit', size=(12, 2), font='Helvetica 14')],
-              [sg.Image(filename='', key='image'), sg.Canvas(size=(60, 60), key='-CANVAS-')]]
+               sg.Button('Exit', size=(12, 2), font='Helvetica 14'),
+               sg.Multiline('', key='-MULTILINE-', size=(40, 4))],
+              [sg.Image(filename='', key='-IMAGE-'), 
+               sg.Canvas(key='-CANVAS-')]]
 
     # create the window and show it without the plot
-    window = sg.Window('Face Detector', layout, location=(400, 200), finalize=True)
+    window = sg.Window('Face Detector', layout, location=(200, 100), size=(1200,600), finalize=True)
     canvas_elem = window['-CANVAS-']
     canvas = canvas_elem.TKCanvas
 
     # draw and hide the initial plot in the window
-    fig = Figure(figsize=(6,4))
+    fig = Figure(figsize=(5,4), tight_layout=True)
     ax = fig.add_subplot(111)
     fig_agg = draw_figure(canvas, fig)
     canvas_elem.hide_row()
     
-    return window, canvas, canvas_elem, ax, fig_agg
+    return window, canvas_elem, ax, fig_agg
 
+def get_detector():
+    """
+    Initialize detector with default values
+    (note: detector image size will be overwritten later)
+    for details, see link [https://docs.opencv.org/4.7.0/df/d20/classcv_1_1FaceDetectorYN.html]
+    """
+    detector = cv.FaceDetectorYN.create(
+        PATH_DETECTION_MODEL, 
+        '', 
+        (0, 0),
+        0.9,
+        0.3,
+        5000)
+    return detector
+    
 def get_mode(mode, event):
     if event == 'Presence Mode':
         return 'P'
@@ -183,7 +201,7 @@ def get_mode(mode, event):
     
 def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance):
     if mode == 'P':
-        window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces_over_time[-1]}')
+        window['-MULTILINE-'].update(f'Number of faces: {num_faces_over_time[-1]}')
         ax.cla()
         ax.set_xlabel('Time')
         ax.set_ylabel('Number of Faces')
@@ -192,28 +210,35 @@ def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance
         ax.plot(num_faces_over_time)
         fig_agg.draw()
     elif mode == 'D':
-        window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {dummy_distance[-1]} mm')
+        window['-MULTILINE-'].update(f'Distance to nearest face: {dummy_distance[-1]} mm')
         ax.cla()
         ax.set_xlabel('Time')
-        ax.set_ylabel('Distance')
+        ax.set_ylabel('Distance (mm)')
         ax.set_title('Distance to Nearest Face over Time')
         ax.grid()
         ax.plot(dummy_distance)
         fig_agg.draw()
     elif mode == 'A':
-        window['-OUTPUT_MODE_1-'].update(f'Sorted distances: 0')  
-    
-def run_gui_opencv(detector, tm):
+        window['-MULTILINE-'].update('List of Faces:')
+        window['-MULTILINE-'].print('Testing 1 2 3')
+        ax.clear()
+        ax.set_axis_off()
+        fig_agg.draw()
+
+def run_gui():
     """
     Main GUI and event loop
     """
-    window, canvas, canvas_elem, ax, fig_agg = init_gui()
+    window, canvas_elem, ax, fig_agg = init_gui()
     cap = cv.VideoCapture(0)
    
     # initialise variables
+    tm = cv.TickMeter()
     num_faces_over_time = []
     dummy_distance = []
     mode = ''
+    detector = get_detector()
+    
     while True:
         event, values = window.read(timeout=20)
         if event == 'Exit' or event == sg.WIN_CLOSED:
@@ -221,13 +246,16 @@ def run_gui_opencv(detector, tm):
         mode = get_mode(mode, event)
         if mode:
             ret, frame = cap.read()
+            
             # Perform operations on frame
-            faces = get_faces(frame, detector, tm)
-            if faces:
-                num_faces, face_data_list = get_data(faces)
-                nearest_face = get_nearest_face(face_data_list)
+            detected_faces = detect_faces(frame, detector, tm)
+            if detected_faces:
+                faces = convert_to_class_face(detected_faces)
+                sort_faces(faces)
                 
-                num_faces_over_time.append(num_faces)
+                nearest_face = faces[0]
+                
+                num_faces_over_time.append(len(faces))
                 dummy_distance.append(nearest_face.distance)
             else:
                 num_faces_over_time.append(0)
@@ -235,29 +263,18 @@ def run_gui_opencv(detector, tm):
                 
             # Show frame on gui
             imgbytes = cv.imencode('.png', frame)[1].tobytes()
-            window['image'].update(data=imgbytes)
+            window['-IMAGE-'].update(data=imgbytes)
             
             # Show text data on gui
             canvas_elem.unhide_row()
             activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance)
             
-
     # Finish up by removing from the screen
     cap.release()
     window.close() 
 
 def main():
-    tm = cv.TickMeter()
-    # Initialize detector with default values
-    # (note: detector image size will be overwritten later)
-    detector = cv.FaceDetectorYN.create(
-        'Data/face_detection_yunet_2022mar.onnx', 
-        '', 
-        (0, 0),
-        0.9,
-        0.3,
-        5000)
-    run_gui_opencv(detector, tm)
+    run_gui()
 
 if __name__ == "__main__":
     main()
