@@ -144,6 +144,7 @@ def draw_figure(canvas, figure):
     return figure_canvas_agg
 
 def init_gui():
+    # define the window layout
     layout = [[sg.Text('Face Detector', size=(40, 1), justification='left', font='Helvetica 25')],
               [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-')],
               [sg.Button('Presence Mode', size=(12, 2), font='Helvetica 14'),
@@ -155,33 +156,51 @@ def init_gui():
     # create the window and show it without the plot
     window = sg.Window('Face Detector', layout, location=(400, 200), finalize=True)
     canvas_elem = window['-CANVAS-']
-    canvas = canvas_elem.TKCanvas    
-    return window, canvas, canvas_elem
-    
-def run_gui_opencv(detector, tm):
-    """
-    Main GUI and event loop
-    """
-    # define the window layout
-    window, canvas, canvas_elem = init_gui()
-    
-    ################################
-    # Event Loop and GUI Operations
-    ################################
-    cap = cv.VideoCapture(0)
-    
-    # initialise variables
-    recording = False
-    mode = ''
-    num_faces_over_time = []
-    dummy_distance = []
-    
+    canvas = canvas_elem.TKCanvas
+
     # draw and hide the initial plot in the window
     fig = Figure(figsize=(6,4))
     ax = fig.add_subplot(111)
     fig_agg = draw_figure(canvas, fig)
     canvas_elem.hide_row()
     
+    return window, canvas, canvas_elem, ax, fig_agg
+
+def activate_mode(mode, window, ax, fig_agg, num_faces, num_faces_over_time, dummy_distance):
+    if mode == 'P':
+        window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces}')
+        ax.cla()
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Number of Faces')
+        ax.set_title('Number of Faces over Time')
+        ax.grid()
+        ax.plot(num_faces_over_time)
+        fig_agg.draw()
+    elif mode == 'D':
+        window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {num_faces}')
+        ax.cla()
+        ax.set_xlabel('Time')
+        ax.set_ylabel('Distance')
+        ax.set_title('Distance to Nearest Face over Time')
+        ax.grid()
+        ax.plot(dummy_distance)
+        fig_agg.draw()
+    elif mode == 'A':
+        window['-OUTPUT_MODE_1-'].update(f'Sorted distances: {num_faces}')  
+    
+def run_gui_opencv(detector, tm):
+    """
+    Main GUI and event loop
+    """
+    window, canvas, canvas_elem, ax, fig_agg = init_gui()
+    cap = cv.VideoCapture(0)
+   
+    # initialise variables
+    recording = False
+    mode = ''
+    num_faces_over_time = []
+    dummy_distance = []
+
     while True:
         event, values = window.read(timeout=20)
         if event == 'Exit' or event == sg.WIN_CLOSED:
@@ -216,26 +235,8 @@ def run_gui_opencv(detector, tm):
             
             # Show text data on gui
             canvas_elem.unhide_row()
-            if mode == 'P':
-                window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces}')
-                ax.cla()
-                ax.set_xlabel('Time')
-                ax.set_ylabel('Number of Faces')
-                ax.set_title('Number of Faces over Time')
-                ax.grid()
-                ax.plot(num_faces_over_time)
-                fig_agg.draw()
-            elif mode == 'D':
-                window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {num_faces}')
-                ax.cla()
-                ax.set_xlabel('Time')
-                ax.set_ylabel('Distance')
-                ax.set_title('Distance to Nearest Face over Time')
-                ax.grid()
-                ax.plot(dummy_distance)
-                fig_agg.draw()
-            elif mode == 'A':
-                window['-OUTPUT_MODE_1-'].update(f'Sorted distances: {num_faces}')
+            activate_mode(mode, window, ax, fig_agg, num_faces, num_faces_over_time, dummy_distance)
+            
 
     # Finish up by removing from the screen
     cap.release()
