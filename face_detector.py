@@ -43,11 +43,15 @@ class Face():
         self.y = 0
         self.w = 0
         self.h = 0
+        self.size = 0
         self.coeffs = self.get_coeffs()
     
     def show_data(self):
         print(f'Face {self.id}: x: {self.x} y: {self.y} w: {self.w}, h: {self.h}')
     
+    def calc_size(self):
+        self.size = self.w * self.h
+        
     def calc_dist(self):
         size = (self.w, self.h)
         dists = np.zeros(2)
@@ -55,7 +59,7 @@ class Face():
             A = self.coeffs[i, 0]
             B = self.coeffs[i, 1]
             dists[i] = A*(FACE_SIZE[i]/size[i]) - B
-        self.distance = np.average(dists)
+        self.distance = round(np.average(dists),0)
 
     def get_coeffs(self):
         # get constants from using w and h
@@ -122,13 +126,14 @@ def get_nearest_face(faces):
     assume largest area = closest face
     """
     if faces:
-        areas = []
         for face in faces:
-            areas.append(face.w * face.h)
+            face.calc_size()
+        faces.sort(key=lambda f: f.size, reverse=True)
+        return faces[0]
     else:
         print('No faces')
+        return None 
     
-
 def draw_on_frame(frame, faces, fps, thickness=2):
     if faces is not None:
         for idx, face in enumerate(faces):
@@ -146,7 +151,7 @@ def draw_figure(canvas, figure):
 def init_gui():
     # define the window layout
     layout = [[sg.Text('Face Detector', size=(40, 1), justification='left', font='Helvetica 25')],
-              [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-')],
+              [sg.Text(size=(40,2), key='-OUTPUT_MODE_1-', font='Helvetica 25')],
               [sg.Button('Presence Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Distance Mode', size=(12, 2), font='Helvetica 14'),
                sg.Button('Advanced Mode', size=(12, 2), font='Helvetica 14'),
@@ -166,9 +171,19 @@ def init_gui():
     
     return window, canvas, canvas_elem, ax, fig_agg
 
-def activate_mode(mode, window, ax, fig_agg, num_faces, num_faces_over_time, dummy_distance):
+def get_mode(mode, event):
+    if event == 'Presence Mode':
+        return 'P'
+    elif event == 'Distance Mode':
+        return 'D'
+    elif event == 'Advanced Mode':
+        return 'A'
+    else:
+        return mode
+    
+def activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance):
     if mode == 'P':
-        window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces}')
+        window['-OUTPUT_MODE_1-'].update(f'Number of faces: {num_faces_over_time[-1]}')
         ax.cla()
         ax.set_xlabel('Time')
         ax.set_ylabel('Number of Faces')
@@ -177,7 +192,7 @@ def activate_mode(mode, window, ax, fig_agg, num_faces, num_faces_over_time, dum
         ax.plot(num_faces_over_time)
         fig_agg.draw()
     elif mode == 'D':
-        window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {num_faces}')
+        window['-OUTPUT_MODE_1-'].update(f'Distance to nearest face: {dummy_distance[-1]} mm')
         ax.cla()
         ax.set_xlabel('Time')
         ax.set_ylabel('Distance')
@@ -186,7 +201,7 @@ def activate_mode(mode, window, ax, fig_agg, num_faces, num_faces_over_time, dum
         ax.plot(dummy_distance)
         fig_agg.draw()
     elif mode == 'A':
-        window['-OUTPUT_MODE_1-'].update(f'Sorted distances: {num_faces}')  
+        window['-OUTPUT_MODE_1-'].update(f'Sorted distances: 0')  
     
 def run_gui_opencv(detector, tm):
     """
@@ -196,46 +211,35 @@ def run_gui_opencv(detector, tm):
     cap = cv.VideoCapture(0)
    
     # initialise variables
-    recording = False
-    mode = ''
     num_faces_over_time = []
     dummy_distance = []
-
+    mode = ''
     while True:
         event, values = window.read(timeout=20)
         if event == 'Exit' or event == sg.WIN_CLOSED:
             break
-        elif event == 'Presence Mode':
-            recording = True
-            mode = 'P'
-        elif event == 'Distance Mode':
-            recording = True
-            mode = 'D'
-        elif event == 'Advanced Mode':
-            recording = True
-            mode = 'A'
-
-        if recording:
+        mode = get_mode(mode, event)
+        if mode:
             ret, frame = cap.read()
-            
             # Perform operations on frame
             faces = get_faces(frame, detector, tm)
             if faces:
                 num_faces, face_data_list = get_data(faces)
-                nearest = get_nearest_face(face_data_list)
+                nearest_face = get_nearest_face(face_data_list)
                 
                 num_faces_over_time.append(num_faces)
-            if num_faces:
-                dummy_distance.append(num_faces+5)
+                dummy_distance.append(nearest_face.distance)
             else:
+                num_faces_over_time.append(0)
                 dummy_distance.append(0)
+                
             # Show frame on gui
             imgbytes = cv.imencode('.png', frame)[1].tobytes()
             window['image'].update(data=imgbytes)
             
             # Show text data on gui
             canvas_elem.unhide_row()
-            activate_mode(mode, window, ax, fig_agg, num_faces, num_faces_over_time, dummy_distance)
+            activate_mode(mode, window, ax, fig_agg, num_faces_over_time, dummy_distance)
             
 
     # Finish up by removing from the screen
@@ -254,7 +258,6 @@ def main():
         0.3,
         5000)
     run_gui_opencv(detector, tm)
-
 
 if __name__ == "__main__":
     main()
