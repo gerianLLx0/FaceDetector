@@ -133,7 +133,6 @@ def sort_faces(faces):
         return None 
 
 def update_existing_faces(existing_faces, seen_faces):
-    print(f"UPDATING: existing: {existing_faces}")
     new_faces = []
     if existing_faces:
         for s_face in seen_faces:
@@ -153,7 +152,6 @@ def update_existing_faces(existing_faces, seen_faces):
         # initializes existing
         for s_face in seen_faces:
             new_faces.append(s_face)
-    print(f"UPDATING: new: {new_faces}")
     return new_faces
 
 def is_same(e_face, n_face):
@@ -172,10 +170,8 @@ def is_same(e_face, n_face):
     if (e_face.h * (1-percent) <= n_face.h) and (n_face.h <= e_face.h * (1+percent)):
         same[3] = 1
     if same.all():
-        print("same")
         return True
     else:
-        print("diff")
         return False
 
 def draw_on_frame(frame, faces, fps, thickness=2):
@@ -298,7 +294,6 @@ def run_gui():
                 faces, counter = convert_to_class_face(detected_faces, counter)           
                 existing_faces = update_existing_faces(existing_faces, faces)
                 sort_faces(existing_faces)
-                print(f"MAIN: {existing_faces}")
                 
                 # Operations for plotting
                 num_faces_over_time.append(len(faces))
